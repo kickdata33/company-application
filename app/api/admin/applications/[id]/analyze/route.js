@@ -55,7 +55,7 @@ export async function POST(req,{params}){
 5. หมายเหตุสั้น ๆ ว่า Admin ต้องตรวจชื่อกับหน่วยงานจดทะเบียนก่อนใช้จริง`;
 
     const res=await client.responses.create({
-      model:"gpt-5-mini",
+      model:"gpt-6-luna",
       input:prompt
     });
 
@@ -85,6 +85,7 @@ export async function POST(req,{params}){
 
     let message="วิเคราะห์ด้วย AI ไม่สำเร็จ";
     if(e?.status===401) message="OpenAI API Key ไม่ถูกต้อง";
+    else if(e?.status===404) message="ไม่พบโมเดล AI ที่ตั้งค่าไว้ หรือ API Project นี้ไม่มีสิทธิ์ใช้โมเดล";
     else if(e?.status===429) message="OpenAI API ใช้งานไม่ได้ชั่วคราว: กรุณาตรวจ Billing / Credit / Quota";
     else if(e?.status===403) message="OpenAI API Key ไม่มีสิทธิ์ใช้โมเดลนี้";
     else if(e?.code==="ETIMEDOUT" || e?.name==="APIConnectionTimeoutError") message="OpenAI ตอบกลับช้าเกิน 30 วินาที กรุณาลองใหม่";
