@@ -142,6 +142,7 @@ export async function POST(){
       headers:{"content-type":"application/json"},
       body:JSON.stringify({
         secret:syncSecret,
+        spreadsheetId:"1jGM1HTErQOvEhXHWgHhOrCLE__DJ14p0hgEKeyv3vvw",
         headers,
         records
       }),
