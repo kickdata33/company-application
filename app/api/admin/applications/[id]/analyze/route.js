@@ -124,7 +124,8 @@ accounting@...
 
     const res=await client.responses.create({
       model:"gpt-6-luna",
-      input:prompt
+      input:prompt,
+      max_output_tokens:2600
     });
 
     const analysis=(res.output_text || "").trim();
