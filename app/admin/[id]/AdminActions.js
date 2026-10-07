@@ -11,8 +11,17 @@ export default function AdminActions({id,initial,selectedName,selectedEmail}){
   async function analyze(){
     setBusy(true);
     setMsg("");
+    setAi("");
+
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),45000);
+
     try {
-      const r=await fetch(`/api/admin/applications/${id}/analyze`,{method:"POST"});
+      const r=await fetch(`/api/admin/applications/${id}/analyze`,{
+        method:"POST",
+        signal:controller.signal
+      });
+
       let j={};
       try { j=await r.json(); } catch {}
 
@@ -23,8 +32,13 @@ export default function AdminActions({id,initial,selectedName,selectedEmail}){
         setMsg(j.error || `วิเคราะห์ไม่สำเร็จ (HTTP ${r.status})`);
       }
     }catch(e){
-      setMsg("เชื่อมต่อระบบ AI ไม่สำเร็จ กรุณาลองใหม่");
+      if(e?.name==="AbortError"){
+        setMsg("AI ใช้เวลานานเกิน 45 วินาที ระบบหยุดคำขอนี้แล้ว กรุณากดวิเคราะห์ใหม่");
+      }else{
+        setMsg("เชื่อมต่อระบบ AI ไม่สำเร็จ กรุณาลองใหม่");
+      }
     }finally{
+      clearTimeout(timer);
       setBusy(false);
     }
   }
@@ -47,9 +61,11 @@ export default function AdminActions({id,initial,selectedName,selectedEmail}){
       {busy?"กำลังวิเคราะห์...":"วิเคราะห์ด้วย AI"}
     </button>
 
-    {msg && <div className={msg.includes("ไม่") || msg.includes("ผิด") || msg.includes("Quota") || msg.includes("Billing") ? "notice error" : "notice"}>{msg}</div>}
+    {msg && <div className={msg.includes("ไม่") || msg.includes("ผิด") || msg.includes("Quota") || msg.includes("Billing") || msg.includes("เกิน") ? "notice error" : "notice"}>{msg}</div>}
 
-    {ai&&<div className="ai" style={{marginTop:16}}>{ai}</div>}
+    {busy && <div className="notice" style={{marginTop:16}}>กำลังสร้างผลวิเคราะห์ใหม่ กรุณารอสักครู่...</div>}
+
+    {!busy && ai&&<div className="ai" style={{marginTop:16}}>{ai}</div>}
 
     <h2 style={{marginTop:28}}>Admin ตัดสินใจ</h2>
     <div className="field">
