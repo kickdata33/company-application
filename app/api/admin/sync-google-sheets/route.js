@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import sharp from "sharp";
 import { isAdmin } from "../../../../lib/adminAuth";
 import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
 
@@ -21,6 +22,35 @@ function mimeFromPath(path=""){
   return "application/octet-stream";
 }
 
+async function makeThumbnail(url,mimeType){
+  if(!mimeType.startsWith("image/")) return null;
+
+  try{
+    const r=await fetch(url,{cache:"no-store"});
+    if(!r.ok) return null;
+
+    const input=Buffer.from(await r.arrayBuffer());
+    const output=await sharp(input)
+      .rotate()
+      .resize({
+        width:320,
+        height:220,
+        fit:"inside",
+        withoutEnlargement:true
+      })
+      .jpeg({quality:72})
+      .toBuffer();
+
+    return {
+      mimeType:"image/jpeg",
+      base64:output.toString("base64")
+    };
+  }catch(e){
+    console.error("Thumbnail error:",e);
+    return null;
+  }
+}
+
 async function signedDocument(sb,path,fileName){
   if(!path) return null;
 
@@ -30,10 +60,14 @@ async function signedDocument(sb,path,fileName){
 
   if(error || !data?.signedUrl) return null;
 
+  const mimeType=mimeFromPath(path);
+  const thumbnail=await makeThumbnail(data.signedUrl,mimeType);
+
   return {
     url:data.signedUrl,
     fileName,
-    mimeType:mimeFromPath(path)
+    mimeType,
+    thumbnail
   };
 }
 
