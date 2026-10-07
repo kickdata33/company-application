@@ -12,7 +12,7 @@ export async function POST(){
     }
 
     const scriptUrl=process.env.GOOGLE_APPS_SCRIPT_URL;
-    const syncSecret=process.env.GOOGLE_SYNC_SECRET;
+    const syncSecret=(process.env.GOOGLE_SYNC_SECRET || "").trim();
 
     if(!scriptUrl || !syncSecret){
       return NextResponse.json(
@@ -69,6 +69,9 @@ export async function POST(){
     try{ result=JSON.parse(text); }catch{}
 
     if(!r.ok || result.ok!==true){
+      if(result.error==="Unauthorized"){
+        throw new Error("SYNC_SECRET ไม่ตรงกันระหว่าง Vercel กับ Google Apps Script");
+      }
       throw new Error(result.error || `Google Apps Script sync failed (HTTP ${r.status})`);
     }
 
