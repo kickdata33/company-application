@@ -5,13 +5,39 @@ import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
 export const runtime="nodejs";
 export const maxDuration=60;
 
-function sheetLink(url,label){
-  const safeUrl=String(url).replace(/"/g,'""');
-  const safeLabel=String(label).replace(/"/g,'""');
-  return `=HYPERLINK("${safeUrl}","${safeLabel}")`;
+function extFromPath(path=""){
+  const clean=String(path).split("?")[0];
+  const ext=clean.includes(".") ? clean.split(".").pop().toLowerCase() : "bin";
+  return ext || "bin";
 }
 
-export async function POST(req){
+function mimeFromPath(path=""){
+  const ext=extFromPath(path);
+  if(ext==="jpg" || ext==="jpeg") return "image/jpeg";
+  if(ext==="png") return "image/png";
+  if(ext==="webp") return "image/webp";
+  if(ext==="gif") return "image/gif";
+  if(ext==="pdf") return "application/pdf";
+  return "application/octet-stream";
+}
+
+async function signedDocument(sb,path,fileName){
+  if(!path) return null;
+
+  const {data,error}=await sb.storage
+    .from("application-documents")
+    .createSignedUrl(path,600);
+
+  if(error || !data?.signedUrl) return null;
+
+  return {
+    url:data.signedUrl,
+    fileName,
+    mimeType:mimeFromPath(path)
+  };
+}
+
+export async function POST(){
   try{
     if(!(await isAdmin())){
       return NextResponse.json({error:"Unauthorized"},{status:401});
@@ -27,7 +53,6 @@ export async function POST(req){
       );
     }
 
-    const origin=new URL(req.url).origin;
     const sb=supabaseAdmin();
 
     const {data,error}=await sb
@@ -44,22 +69,39 @@ export async function POST(req){
       "บัตรประชาชนด้านหน้า","บัตรประชาชนด้านหลัง","ทะเบียนบ้าน"
     ];
 
-    const rows=(data || []).map(x=>[
-      x.id || "",
-      x.created_at ? new Date(x.created_at).toLocaleString("th-TH",{timeZone:"Asia/Bangkok"}) : "",
-      x.first_name_th || "",
-      x.last_name_th || "",
-      x.first_name_en || "",
-      x.last_name_en || "",
-      x.skills || "",
-      x.ai_analysis || "",
-      x.selected_company_name || "",
-      x.selected_email || "",
-      x.status || "",
-      sheetLink(`${origin}/api/admin/applications/${x.id}/document?type=front`,"เปิดด้านหน้า"),
-      sheetLink(`${origin}/api/admin/applications/${x.id}/document?type=back`,"เปิดด้านหลัง"),
-      sheetLink(`${origin}/api/admin/applications/${x.id}/document?type=house`,"เปิดทะเบียนบ้าน")
-    ]);
+    const records=[];
+
+    for(const x of (data || [])){
+      const frontExt=extFromPath(x.id_front);
+      const backExt=extFromPath(x.id_back);
+      const houseExt=extFromPath(x.house_registration);
+
+      const [front,back,house]=await Promise.all([
+        signedDocument(sb,x.id_front,`${x.id}-id-front.${frontExt}`),
+        signedDocument(sb,x.id_back,`${x.id}-id-back.${backExt}`),
+        signedDocument(sb,x.house_registration,`${x.id}-house-registration.${houseExt}`)
+      ]);
+
+      records.push({
+        values:[
+          x.id || "",
+          x.created_at ? new Date(x.created_at).toLocaleString("th-TH",{timeZone:"Asia/Bangkok"}) : "",
+          x.first_name_th || "",
+          x.last_name_th || "",
+          x.first_name_en || "",
+          x.last_name_en || "",
+          x.skills || "",
+          x.ai_analysis || "",
+          x.selected_company_name || "",
+          x.selected_email || "",
+          x.status || "",
+          "",
+          "",
+          ""
+        ],
+        documents:{front,back,house}
+      });
+    }
 
     const r=await fetch(scriptUrl,{
       method:"POST",
@@ -67,7 +109,7 @@ export async function POST(req){
       body:JSON.stringify({
         secret:syncSecret,
         headers,
-        rows
+        records
       }),
       redirect:"follow"
     });
@@ -83,7 +125,11 @@ export async function POST(req){
       throw new Error(result.error || `Google Apps Script sync failed (HTTP ${r.status})`);
     }
 
-    return NextResponse.json({ok:true,rows:rows.length});
+    return NextResponse.json({
+      ok:true,
+      rows:records.length,
+      driveFolderUrl:result.driveFolderUrl || null
+    });
   }catch(e){
     console.error("Google Sheets sync error:",e);
     return NextResponse.json(
