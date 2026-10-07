@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
-import { google } from "googleapis";
 import { isAdmin } from "../../../../lib/adminAuth";
 import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
 
 export const runtime="nodejs";
 export const maxDuration=60;
-
-const DEFAULT_SHEET_ID="1jGM1HTErQOvEhXHWgHhOrCLE__DJ14p0hgEKeyv3vvw";
 
 export async function POST(){
   try{
@@ -14,28 +11,17 @@ export async function POST(){
       return NextResponse.json({error:"Unauthorized"},{status:401});
     }
 
-    const email=process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-    const rawKey=process.env.GOOGLE_PRIVATE_KEY;
-    const spreadsheetId=process.env.GOOGLE_SHEET_ID || DEFAULT_SHEET_ID;
+    const scriptUrl=process.env.GOOGLE_APPS_SCRIPT_URL;
+    const syncSecret=process.env.GOOGLE_SYNC_SECRET;
 
-    if(!email || !rawKey){
+    if(!scriptUrl || !syncSecret){
       return NextResponse.json(
-        {error:"ยังไม่ได้ตั้งค่า GOOGLE_SERVICE_ACCOUNT_EMAIL และ GOOGLE_PRIVATE_KEY ใน Vercel"},
+        {error:"ยังไม่ได้ตั้งค่า GOOGLE_APPS_SCRIPT_URL และ GOOGLE_SYNC_SECRET ใน Vercel"},
         {status:500}
       );
     }
 
-    const privateKey=rawKey.replace(/\\n/g,"\n");
-
-    const auth=new google.auth.JWT({
-      email,
-      key:privateKey,
-      scopes:["https://www.googleapis.com/auth/spreadsheets"]
-    });
-
-    const sheets=google.sheets({version:"v4",auth});
     const sb=supabaseAdmin();
-
     const {data,error}=await sb
       .from("applications")
       .select("*")
@@ -67,27 +53,31 @@ export async function POST(){
       x.house_registration || ""
     ]);
 
-    await sheets.spreadsheets.values.clear({
-      spreadsheetId,
-      range:"Applications!A2:N"
+    const r=await fetch(scriptUrl,{
+      method:"POST",
+      headers:{"content-type":"application/json"},
+      body:JSON.stringify({
+        secret:syncSecret,
+        headers,
+        rows
+      }),
+      redirect:"follow"
     });
 
-    await sheets.spreadsheets.values.update({
-      spreadsheetId,
-      range:"Applications!A1",
-      valueInputOption:"RAW",
-      requestBody:{values:[headers,...rows]}
-    });
+    const text=await r.text();
+    let result={};
+    try{ result=JSON.parse(text); }catch{}
+
+    if(!r.ok || result.ok!==true){
+      throw new Error(result.error || `Google Apps Script sync failed (HTTP ${r.status})`);
+    }
 
     return NextResponse.json({ok:true,rows:rows.length});
   }catch(e){
     console.error("Google Sheets sync error:",e);
-    let message=e?.message || "Sync Google Sheets ไม่สำเร็จ";
-
-    if(String(message).includes("PERMISSION_DENIED") || String(message).includes("403")){
-      message="Google Service Account ยังไม่มีสิทธิ์แก้ไข Google Sheet นี้ กรุณา Share Sheet ให้ service account เป็น Editor";
-    }
-
-    return NextResponse.json({error:message},{status:500});
+    return NextResponse.json(
+      {error:e?.message || "Sync Google Sheets ไม่สำเร็จ"},
+      {status:500}
+    );
   }
 }
