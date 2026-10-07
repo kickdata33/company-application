@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import { isAdmin } from "../../lib/adminAuth";
 import { supabaseAdmin } from "../../lib/supabaseAdmin";
+import SyncSheetsButton from "./SyncSheetsButton";
+
+const SHEET_URL="https://docs.google.com/spreadsheets/d/1jGM1HTErQOvEhXHWgHhOrCLE__DJ14p0hgEKeyv3vvw/edit";
 
 export default async function Admin(){
   if(!(await isAdmin())) redirect("/admin/login");
@@ -17,9 +20,12 @@ export default async function Admin(){
           <h1>ใบสมัครเปิดบริษัท</h1>
           <div className="muted">สำหรับผู้ดูแลระบบ</div>
         </div>
-        <a className="btn" style={{color:"#fff",whiteSpace:"nowrap"}} href="/api/admin/export">
-          Export Excel
-        </a>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+          <SyncSheetsButton />
+          <a className="btn secondary" style={{whiteSpace:"nowrap"}} href={SHEET_URL} target="_blank" rel="noreferrer">
+            เปิด Google Sheets
+          </a>
+        </div>
       </div>
 
       <div style={{overflowX:"auto"}}>
